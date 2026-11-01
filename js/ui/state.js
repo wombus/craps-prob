@@ -35,8 +35,11 @@ export const store = {
   },
 
   resetToStarters() {
-    const cat = presetCatalog(this.rules.tableMin);
-    this.strategies = STARTER_PRESETS.map((k) => cat.find((p) => p.key === k).build());
+    const cat = presetCatalog(this.rules.tableMin, this.rules.game);
+    const keys = this.rules.game === 'crapless'
+      ? ['craplessMax', 'pass', 'molly', 'place68', 'ironCross', 'craplessOutside', 'craplessAcross', 'passMartingale']
+      : STARTER_PRESETS;
+    this.strategies = keys.map((k) => cat.find((p) => p.key === k)).filter(Boolean).map((p) => p.build());
     this.included = new Set(this.strategies.map((s) => s.id));
     this.strategies.forEach((s, i) => { s.colorSlot = i < COLOR_SLOTS ? i : null; });
   },

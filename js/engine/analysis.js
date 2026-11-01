@@ -1,6 +1,6 @@
 // Analysis: merged simulation output → summaries, rankings, chart data and plain-English insights.
 
-import { summarizeStrategy, scoreSummaries, trajectoryBands, paretoFrontier, diceChiSquare, THEORY, mean } from './stats.js';
+import { summarizeStrategy, scoreSummaries, trajectoryBands, paretoFrontier, diceChiSquare, theoryFor, mean } from './stats.js';
 import { keyLabel } from './constants.js';
 import { describeStrategy } from './strategy.js';
 
@@ -56,7 +56,7 @@ export function analyze(merged, strategies, session, rules) {
     chi: diceChiSquare(d.sums),
     avgRollsPerGame: d.rolls / Math.max(1, merged.trials * session.games),
     avgHandLength: d.sevenOuts ? (d.rolls - 0) / d.sevenOuts : 0,
-    theory: THEORY,
+    theory: theoryFor(rules),
   };
 
   const insights = buildInsights(summaries, merged, session, rules);

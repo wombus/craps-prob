@@ -1,7 +1,7 @@
 // Permutation explorer: build every combination of a few strategy "dimensions" and let
 // the simulator rank them. This is a brute-force search over the strategy space.
 
-import { defaultStrategy, normalizeStrategy, describeStrategy, strategyBets, newId } from './strategy.js';
+import { defaultStrategy, normalizeStrategy, describeStrategy, strategyBets, newId, validateStrategy } from './strategy.js';
 
 const up = (x, unit) => Math.ceil(x / unit - 1e-9) * unit;
 
@@ -17,7 +17,8 @@ export const DIMENSIONS = [
     defaults: [0, 2] },
   { key: 'place', label: 'Box-number bets', options: [
     { id: 'none', label: 'None' }, { id: '68', label: 'Place 6 & 8' }, { id: 'inside', label: 'Inside (5-6-8-9)' },
-    { id: 'across', label: 'Across (all six)' }, { id: 'buy410', label: 'Buy 4 & 10' }, { id: 'lay410', label: 'Lay 4 & 10' }],
+    { id: 'across', label: 'Across (all six)' }, { id: 'buy410', label: 'Buy 4 & 10' }, { id: 'lay410', label: 'Lay 4 & 10' },
+    { id: 'outside2312', label: '2-3-11-12 (crapless)' }, { id: 'all10', label: 'All ten (crapless)' }],
     defaults: ['none', '68', 'inside', 'across'] },
   { key: 'manage', label: 'Place-bet management', options: [
     { id: 'collect', label: 'Collect' }, { id: 'press', label: 'Full press' }, { id: 'regress', label: 'Regress' }, { id: 'hitRun', label: 'Down after 2 hits' }],
@@ -49,13 +50,15 @@ function build(choice, u) {
     case 'across': pa[4] = five; pa[5] = five; pa[6] = six; pa[8] = six; pa[9] = five; pa[10] = five; break;
     case 'buy410': pa[4] = Math.max(20, up(2 * u, 5)); pa[10] = pa[4]; s.place.buy = [4, 10]; break;
     case 'lay410': s.lay.amounts[4] = Math.max(40, 4 * u); s.lay.amounts[10] = s.lay.amounts[4]; break;
+    case 'all10': pa[4] = five; pa[5] = five; pa[6] = six; pa[8] = six; pa[9] = five; pa[10] = five; // falls through
+    case 'outside2312': pa[2] = up(u, 2); pa[3] = up(u, 4); pa[11] = up(u, 4); pa[12] = up(u, 2); break;
   }
-  const hasPlace = ['68', 'inside', 'across', 'buy410'].includes(choice.place);
+  const hasPlace = ['68', 'inside', 'across', 'buy410', 'outside2312', 'all10'].includes(choice.place);
   if (hasPlace) {
     if (choice.manage === 'press') { s.place.onHit = 'press'; s.place.maxPress = 4; }
     else if (choice.manage === 'regress') {
       s.place.onHit = 'regress';
-      for (const n of [4, 5, 6, 8, 9, 10]) pa[n] *= 2; // start at 2 units, regress after first hit
+      for (const n of [2, 3, 4, 5, 6, 8, 9, 10, 11, 12]) pa[n] *= 2; // start at 2 units, regress after first hit
     } else if (choice.manage === 'hitRun') s.place.downAfterHits = 2;
     if (choice.line === 'pass') s.place.skipCovered = true;
   }
@@ -76,11 +79,11 @@ export function signature(s) {
  * Generate unique strategies from the selected options of each dimension.
  * @returns {{strategies:object[], total:number, duplicates:number}}
  */
-export function generatePermutations(selections, tableMin, limit = 2000) {
+export function generatePermutations(selections, tableMin, limit = 2000, rules = null) {
   const dims = DIMENSIONS.map((d) => ({ key: d.key, values: (selections[d.key] && selections[d.key].length) ? selections[d.key] : [d.defaults[0]] }));
   const seen = new Set();
   const strategies = [];
-  let total = 0, duplicates = 0;
+  let total = 0, duplicates = 0, illegal = 0;
   const choice = {};
   const rec = (i) => {
     if (strategies.length >= limit) return;
@@ -88,6 +91,7 @@ export function generatePermutations(selections, tableMin, limit = 2000) {
       total++;
       const s = build(choice, tableMin);
       if (!strategyBets(s).length) return;
+      if (rules && validateStrategy(s, rules).errors.length) { illegal++; return; } // e.g. Don't Pass at a crapless table
       const sig = signature(s);
       if (seen.has(sig)) { duplicates++; return; }
       seen.add(sig);
@@ -100,7 +104,7 @@ export function generatePermutations(selections, tableMin, limit = 2000) {
     for (const v of dims[i].values) { choice[dims[i].key] = v; rec(i + 1); }
   };
   rec(0);
-  return { strategies, total, duplicates, capped: strategies.length >= limit };
+  return { strategies, total, duplicates, illegal, capped: strategies.length >= limit };
 }
 
 export function countRaw(selections) {

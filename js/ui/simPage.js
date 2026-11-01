@@ -9,7 +9,7 @@ import { analyze } from '../engine/analysis.js';
 import { validateStrategy, describeStrategy, normalizeStrategy, defaultStrategy, newId } from '../engine/strategy.js';
 import { presetCatalog } from '../engine/presets.js';
 import { randomSeed } from '../engine/rng.js';
-import { THEORY } from '../engine/stats.js';
+import { theoryFor } from '../engine/stats.js';
 
 export const runner = new SimRunner();
 
@@ -25,11 +25,11 @@ export function mountSimPage(root) {
   const presetSel = h('select', { attrs: { 'aria-label': 'Add a preset strategy' } });
   const fillPresets = () => {
     clear(presetSel).append(h('option', { value: '', text: '+ Add a classic strategy…' }));
-    for (const p of presetCatalog(store.rules.tableMin)) presetSel.append(h('option', { value: p.key, text: p.name, title: p.notes }));
+    for (const p of presetCatalog(store.rules.tableMin, store.rules.game)) presetSel.append(h('option', { value: p.key, text: p.name, title: p.notes }));
   };
   fillPresets();
   presetSel.addEventListener('change', () => {
-    const p = presetCatalog(store.rules.tableMin).find((x) => x.key === presetSel.value);
+    const p = presetCatalog(store.rules.tableMin, store.rules.game).find((x) => x.key === presetSel.value);
     presetSel.value = '';
     if (p) { store.upsertStrategy(p.build()); toast(`Added “${p.name}”`, 'good'); }
   });
@@ -81,7 +81,7 @@ export function mountSimPage(root) {
   const seedInput = numberInput(sess.seed, (v) => { sess.seed = v; commit(); }, { min: 1 });
   const settings = h('div', { class: 'form-grid two' },
     field('Starting bankroll ($)', numberInput(sess.bankroll, (v) => { sess.bankroll = v; commit(); }, { min: 1, step: 50 }), 'Paper money per session'),
-    field('Games per session', numberInput(sess.games, (v) => { sess.games = v; commit(); }, { min: 1, step: 10 }), `A game = one Pass Line decision (~${THEORY.rollsPerGame.toFixed(2)} rolls)`),
+    field('Games per session', numberInput(sess.games, (v) => { sess.games = v; commit(); }, { min: 1, step: 10 }), `A game = one Pass Line decision (~${theoryFor(store.rules).rollsPerGame.toFixed(2)} rolls)`),
     field('Sessions to simulate', numberInput(sess.trials, (v) => { sess.trials = v; commit(); }, { min: 1, step: 1000 }), 'More sessions = tighter estimates'),
     field('Rolls per hour', numberInput(sess.rollsPerHour, (v) => { sess.rollsPerHour = v; commit(); }, { min: 1, step: 10 }), 'Typical busy table: 60–100'),
     field('Stop-loss ($)', numberInput(sess.stopLoss, (v) => { sess.stopLoss = v; commit(); }, { min: 0, step: 50 }), '0 = play all games'),
@@ -93,7 +93,7 @@ export function mountSimPage(root) {
   function updateEstimate() {
     const n = store.strategies.filter((s) => store.included.has(s.id)).length;
     const s = store.session;
-    const rolls = n * s.trials * s.games * THEORY.rollsPerGame;
+    const rolls = n * s.trials * s.games * theoryFor(store.rules).rollsPerGame;
     const secs = rolls / (2.2e6 * runner.size);
     estimate.textContent = `${n} strateg${n === 1 ? 'y' : 'ies'} × ${s.trials.toLocaleString()} sessions × ${s.games} games ≈ ${num(rolls / 1e6, 1)}M rolls · est. ${secs < 1 ? '<1' : Math.ceil(secs)}s on ${runner.size} worker${runner.size > 1 ? 's' : ''}`;
   }

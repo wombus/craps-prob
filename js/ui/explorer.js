@@ -7,7 +7,7 @@ import { runner } from './simPage.js';
 import { DIMENSIONS, defaultSelections, generatePermutations, countRaw } from '../engine/permutations.js';
 import { analyze } from '../engine/analysis.js';
 import { OBJECTIVES, mean } from '../engine/stats.js';
-import { THEORY } from '../engine/stats.js';
+import { theoryFor } from '../engine/stats.js';
 import { scatter, hbars, mount } from './charts.js';
 import { newId } from '../engine/strategy.js';
 
@@ -23,10 +23,10 @@ export function mountExplorer(root) {
   const progress = h('div', { class: 'progress', hidden: true }, h('div', { class: 'progress-bar' }), h('span', { class: 'progress-text' }));
 
   const updateCount = () => {
-    const { strategies, duplicates } = generatePermutations(sel, store.rules.tableMin, 5000);
+    const { strategies, duplicates, illegal } = generatePermutations(sel, store.rules.tableMin, 5000, store.rules);
     const s = store.session;
-    const rolls = strategies.length * trials * s.games * THEORY.rollsPerGame;
-    countEl.textContent = `${countRaw(sel).toLocaleString()} combinations → ${strategies.length.toLocaleString()} unique strategies (${duplicates} duplicates removed). ≈ ${num(rolls / 1e6, 0)}M rolls, est. ${Math.ceil(rolls / (2.2e6 * runner.size))}s.`;
+    const rolls = strategies.length * trials * s.games * theoryFor(store.rules).rollsPerGame;
+    countEl.textContent = `${countRaw(sel).toLocaleString()} combinations → ${strategies.length.toLocaleString()} unique strategies (${duplicates} duplicates${illegal ? `, ${illegal} not allowed in ${store.rules.game === 'crapless' ? 'crapless' : 'standard'} craps` : ''} removed). ≈ ${num(rolls / 1e6, 0)}M rolls, est. ${Math.ceil(rolls / (2.2e6 * runner.size))}s.`;
     return strategies;
   };
 

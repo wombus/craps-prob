@@ -260,8 +260,10 @@ function renderDice(A) {
     ),
     h('div', { class: 'stat-strip' },
       stat('Rolls per game', `${d.avgRollsPerGame.toFixed(3)}`, `theory ${A.dice.theory.rollsPerGame.toFixed(3)}`),
-      stat('Come-out naturals (7/11)', pct(d.naturals / d.comeOuts, 2), 'theory 22.22%'),
-      stat('Come-out craps (2/3/12)', pct(d.craps / d.comeOuts, 2), 'theory 11.11%'),
+      stat(A.rules.game === 'crapless' ? 'Come-out sevens (crapless)' : 'Come-out naturals (7/11)', pct(d.naturals / d.comeOuts, 2), `theory ${pct(A.dice.theory.pNatural, 2)}`),
+      A.rules.game === 'crapless'
+        ? stat('Come-out craps', '—', 'none in crapless: 2/3/12 become points')
+        : stat('Come-out craps (2/3/12)', pct(d.craps / d.comeOuts, 2), `theory ${pct(A.dice.theory.pCraps, 2)}`),
       stat('Points made', pct(d.pointsMade.reduce((a, b) => a + b, 0) / Math.max(1, d.pointsEstablished.reduce((a, b) => a + b, 0)), 2), `theory ${pct(A.dice.theory.pPointMadeGivenEstablished, 2)}`),
       stat('Longest hand', `${d.longestHand} rolls`, ''),
     ));

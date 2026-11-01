@@ -271,23 +271,36 @@ export function diceChiSquare(sums) {
 }
 
 /** Theoretical constants worth showing next to simulated values. */
-export const THEORY = (() => {
-  const pts = [4, 5, 6, 8, 9, 10];
-  // Expected rolls in a shooter's hand (until seven-out), via a small Markov chain:
-  //   E_C  = 1 + (12/36)·E_C + Σ (w/36)·E_P(n)
-  //   E_Pn = (36 + w·E_C) / (w + 6)
-  // Substitute and solve the linear equation for E_C.
-  let a = 1 - 12 / 36, b = 1;
+/**
+ * Theoretical dice/table constants for a game, to show next to simulated values.
+ * Expected rolls in a shooter's hand (until seven-out), via a small Markov chain:
+ *   E_C  = 1 + P(come-out decides)·E_C + Σ (w/36)·E_P(n)
+ *   E_Pn = (36 + w·E_C) / (w + 6)
+ * Substitute and solve the linear equation for E_C.
+ */
+export function theoryFor(rules) {
+  const crapless = rules && rules.game === 'crapless';
+  const pts = crapless ? [2, 3, 4, 5, 6, 8, 9, 10, 11, 12] : [4, 5, 6, 8, 9, 10];
+  const settleWays = crapless ? 6 : 12; // come-out rolls that don't set a point
+  let a = 1 - settleWays / 36, b = 1;
   for (const n of pts) {
     const w = WAYS[n];
     b += (w / 36) * (36 / (w + 6));
     a -= (w / 36) * (w / (w + 6));
   }
-  const rollsPerHand = b / a;
-  // Expected rolls per pass-line decision: 1 + Σ P(point n) · E[rolls to resolve n]
-  let rollsPerGame = 1;
-  for (const n of pts) rollsPerGame += (WAYS[n] / 36) * (36 / (WAYS[n] + 6));
-  let pointMade = 0;
-  for (const n of pts) pointMade += (WAYS[n] / 36) * (WAYS[n] / (WAYS[n] + 6));
-  return Object.freeze({ rollsPerHand, rollsPerGame, pPointMadeGivenEstablished: pointMade / (24 / 36) });
-})();
+  let rollsPerGame = 1, pointMade = 0, pEst = 0;
+  for (const n of pts) {
+    rollsPerGame += (WAYS[n] / 36) * (36 / (WAYS[n] + 6));
+    pointMade += (WAYS[n] / 36) * (WAYS[n] / (WAYS[n] + 6));
+    pEst += WAYS[n] / 36;
+  }
+  return Object.freeze({
+    rollsPerHand: b / a,
+    rollsPerGame,
+    pPointMadeGivenEstablished: pointMade / pEst,
+    pNatural: crapless ? 6 / 36 : 8 / 36,
+    pCraps: crapless ? 0 : 4 / 36,
+  });
+}
+
+export const THEORY = theoryFor(null);

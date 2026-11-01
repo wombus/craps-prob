@@ -4,11 +4,11 @@
 import { h, clear, pct, money, info } from './dom.js';
 import { store } from './state.js';
 import { WAYS, POINT_NUMBERS, PROPS } from '../engine/constants.js';
-import { houseEdge, winProbability, passWithOddsEdge, ODDS_LIMITS, PLACE_ODDS, TRUE_ODDS, LAY_ODDS, LINE_PROBS, pBefore7 } from '../engine/rules.js';
-import { THEORY } from '../engine/stats.js';
+import { houseEdge, winProbability, passWithOddsEdge, ODDS_LIMITS, PLACE_ODDS, TRUE_ODDS, LAY_ODDS, lineProbs, pBefore7 } from '../engine/rules.js';
+import { theoryFor } from '../engine/stats.js';
 
 const ratio = (x) => {
-  const map = { 2: '2:1', 1.5: '3:2', 1.2: '6:5', 0.5: '1:2', [2 / 3]: '2:3', [5 / 6]: '5:6', 1.8: '9:5', 1.4: '7:5', [7 / 6]: '7:6' };
+  const map = { 6: '6:1', 3: '3:1', 2: '2:1', 1.5: '3:2', 1.2: '6:5', 0.5: '1:2', [2 / 3]: '2:3', [5 / 6]: '5:6', 1.8: '9:5', 1.4: '7:5', [7 / 6]: '7:6', 5.5: '11:2', 2.75: '11:4', [1 / 3]: '1:3', [1 / 6]: '1:6' };
   for (const [k, v] of Object.entries(map)) if (Math.abs(+k - x) < 1e-9) return v;
   return `${x}:1`;
 };
@@ -25,9 +25,18 @@ export function mountLearn(root) {
   store.on('rules', draw);
 }
 
+function comeOutRole(s, r) {
+  if (s === 7) return 'Natural — Pass wins';
+  if (r.game === 'crapless') return [2, 3, 11, 12].includes(s) ? 'Becomes the point (crapless)' : 'Becomes the point';
+  if (s === 11) return 'Natural (yo) — Pass wins';
+  if (s === 2 || s === 3 || s === 12) return `Craps — Pass loses${s === 12 ? ", Don't pushes" : ''}`;
+  return 'Becomes the point';
+}
+
 function render(root) {
   clear(root);
   const r = store.rules;
+  const crapless = r.game === 'crapless';
 
   // ---- 36 combinations
   const grid = h('div', { class: 'combo-grid', attrs: { role: 'grid', 'aria-label': 'All 36 dice combinations' } });
@@ -48,6 +57,7 @@ function render(root) {
       h('td', { class: 'num', text: pct(p, 2) }),
       h('td', { class: 'num', text: oddsAgainst(WAYS[s]) }),
       h('td', { class: 'num', text: s === 7 ? '—' : pct(WAYS[s] / (WAYS[s] + 6), 1) }),
+      h('td', { class: 'role', text: comeOutRole(s, r) }),
       h('td', { class: 'bar-cell' }, h('span', { class: 'mini-bar', style: { width: `${(WAYS[s] / 6) * 100}%` } })));
     tr.addEventListener('pointerenter', () => highlight(s));
     tr.addEventListener('focus', () => highlight(s));
@@ -60,16 +70,31 @@ function render(root) {
     h('p', { class: 'card-sub', text: 'Every craps probability comes from this table. There are 6 ways to roll a 7 — more than any other number — which is why the 7 decides so many bets. Hover a row to highlight its combinations.' }),
     h('div', { class: 'learn-split' },
       h('table', { class: 'data-table compact' },
-        h('thead', {}, h('tr', {}, ['Sum', 'Ways', 'Probability', 'Odds against', 'Before a 7', ''].map((t, i) => h('th', { class: i < 5 ? 'num' : '', text: t })))),
+        h('thead', {}, h('tr', {}, ['Sum', 'Ways', 'Probability', 'Odds against', 'Before a 7', 'On the come-out', ''].map((t, i) => h('th', { class: i < 5 ? 'num' : '', text: t })))),
         h('tbody', {}, probRows)),
       grid)));
 
+  // ---- Where 2, 3, 11 and 12 live
+  root.append(h('section', { class: 'card' },
+    h('h3', { text: 'Where are 2, 3, 11 and 12 on the layout?' }),
+    h('p', { class: 'card-sub', text: crapless
+      ? 'This table plays Crapless craps: 2, 3, 11 and 12 are box numbers. They can be the point, you can place or buy them (2/12 pay 11:2, 3/11 pay 11:4) and take odds on them (6:1 and 3:1). The price: a come-out 11 no longer wins, and the Pass Line edge rises to 5.38%.'
+      : 'In standard craps they are not box numbers, because they settle the come-out roll at once: 2, 3 and 12 are "craps" (Pass loses), 11 is "yo" (Pass wins). You bet on them directly in three places:' }),
+    crapless ? null : h('ul', { class: 'where-list' },
+      h('li', { text: `The Field — wins on 2, 3, 4, 9, 10, 11, 12 (2 pays ${r.field2Pays}:1, 12 pays ${r.field12Pays}:1).` }),
+      h('li', { text: 'One-roll props — Aces (2) and Boxcars (12) pay 30:1; Ace-Deuce (3) and Yo (11) pay 15:1; Any Craps (2, 3, 12) pays 7:1.' }),
+      h('li', { text: 'Horn and C&E — the Horn covers all four (2, 3, 11, 12) at once; C&E splits Any Craps and Yo.' }),
+      h('li', { text: 'Want them as box numbers you can place? Switch the game to Crapless craps on the Table Rules tab.' }))));
+
   // ---- House edge of every bet
+  const lp = lineProbs(r);
   const bets = [
-    ['Pass Line / Come', 'pass', 0, 10, '1:1', LINE_PROBS.passWin],
-    ["Don't Pass / Don't Come", 'dontPass', 0, 10, '1:1 (12 pushes)', LINE_PROBS.dontWin],
+    [crapless ? 'Pass Line / Come (crapless)' : 'Pass Line / Come', 'pass', 0, 10, '1:1', lp.passWin],
+    ...(crapless ? [] : [["Don't Pass / Don't Come", 'dontPass', 0, 10, '1:1 (12 pushes)', lp.dontWin]]),
+    ...(crapless ? [2, 3] : []).map((n) => [`Free odds on ${n} / ${14 - n}`, 'passOdds', n, 10, ratio(TRUE_ODDS[n]), pBefore7(n)]),
     ...POINT_NUMBERS.filter((n) => n <= 6).map((n) => [`Free odds on ${n} / ${14 - n}`, 'passOdds', n, n === 6 ? 10 : n === 5 ? 10 : 10, ratio(TRUE_ODDS[n]), pBefore7(n)]),
-    ...POINT_NUMBERS.filter((n) => n <= 6).map((n) => [`Lay odds on ${n} / ${14 - n}`, 'dontPassOdds', n, n === 6 ? 12 : n === 5 ? 15 : 20, ratio(LAY_ODDS[n]), 1 - pBefore7(n)]),
+    ...(crapless ? [] : POINT_NUMBERS.filter((n) => n <= 6).map((n) => [`Lay odds on ${n} / ${14 - n}`, 'dontPassOdds', n, n === 6 ? 12 : n === 5 ? 15 : 20, ratio(LAY_ODDS[n]), 1 - pBefore7(n)])),
+    ...(crapless ? [[2, 10], [3, 12]] : []).map(([n, a]) => [`Place ${n} / ${14 - n} (crapless)`, 'place', n, a, ratio(PLACE_ODDS[n]), pBefore7(n)]),
     ...[6, 5, 4].map((n) => [`Place ${n} / ${14 - n}`, 'place', n, n === 6 ? 12 : 10, ratio(PLACE_ODDS[n]), pBefore7(n)]),
     ...[4, 5, 6].map((n) => [`Buy ${n} / ${14 - n}`, 'buy', n, n === 6 ? 25 : n === 5 ? 20 : 20, `${ratio(TRUE_ODDS[n])} − ${(r.vigRate * 100).toFixed(0)}%`, pBefore7(n)]),
     ...[4, 5, 6].map((n) => [`Lay ${n} / ${14 - n}`, 'lay', n, n === 6 ? 24 : n === 5 ? 30 : 40, `${ratio(LAY_ODDS[n])} − ${(r.vigRate * 100).toFixed(0)}%`, 1 - pBefore7(n)]),
@@ -77,7 +102,7 @@ function render(root) {
     ['Big 6 / Big 8', 'big', 6, 10, '1:1', pBefore7(6)],
     ['Hard 6 / Hard 8', 'hard', 6, 5, '9:1', 1 / 11],
     ['Hard 4 / Hard 10', 'hard', 4, 5, '7:1', 1 / 9],
-    ...Object.entries(PROPS).map(([k, p]) => [`${p.label} (one roll)`, k, 0, 5, `${p.pays}:1`, winProbability(k)]),
+    ...Object.entries(PROPS).map(([k, p]) => [`${p.label} (one roll)`, k, 0, p.units ? 4 : 5, p.paysLabel, winProbability(k, 0, r)]),
   ].map(([label, type, n, amt, pays, pw]) => ({ label, type, n, amt, pays, pw, edge: houseEdge(type, n, amt, r) }));
   bets.sort((a, b) => a.edge - b.edge);
 
@@ -94,13 +119,14 @@ function render(root) {
         h('td', { class: 'num', text: money(-b.edge * 100, { decimals: 2 }) }))))))));
 
   // ---- Odds dilution
-  const oddsRows = Object.entries(ODDS_LIMITS).map(([k, o]) => ({ label: o.label, edge: passWithOddsEdge(o.mult) }));
+  const oddsRows = Object.entries(ODDS_LIMITS).map(([k, o]) => ({ label: o.label, edge: passWithOddsEdge(o.mult, r) }));
+  const flatEdge = houseEdge('pass', 0, 10, r);
   root.append(h('section', { class: 'card' },
     h('h3', { text: 'Why taking odds matters' }),
-    h('p', { class: 'card-sub', text: `The Pass Line costs ${pct(7 / 495, 3)} of the flat bet. Odds behind it pay true odds (0% edge), so the more odds you take, the smaller the edge on your total wager — though your dollar loss per game stays the same and your swings get bigger.` }),
+    h('p', { class: 'card-sub', text: `The ${crapless ? 'crapless ' : ''}Pass Line costs ${pct(flatEdge, 3)} of the flat bet. Odds behind it pay true odds (0% edge), so the more odds you take, the smaller the edge on your total wager — though your dollar loss per game stays the same and your swings get bigger.` }),
     h('table', { class: 'data-table compact narrow' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Odds taken' }), h('th', { class: 'num', text: 'Combined edge' }))),
-      h('tbody', {}, h('tr', {}, h('td', { text: 'None' }), h('td', { class: 'num', text: pct(7 / 495, 3) })),
+      h('tbody', {}, h('tr', {}, h('td', { text: 'None' }), h('td', { class: 'num', text: pct(flatEdge, 3) })),
         oddsRows.map((o) => h('tr', { class: o.label.startsWith(ODDS_LIMITS[r.oddsLimit].label) ? 'current' : '' }, h('td', { text: o.label }), h('td', { class: 'num', text: pct(o.edge, 3) })))))));
 
   // ---- Concepts
@@ -122,7 +148,7 @@ function render(root) {
       'Average result (mean) is the reward. Risk has several faces: volatility (standard deviation), the bad-day loss (CVaR 5% — the average of the worst 5% of sessions), risk of ruin (going broke), and drawdown (the biggest drop from a high point).',
       'The efficient frontier connects the strategies that no other strategy beats on both reward and risk. If a strategy is off the frontier, there is another one that is at least as good on both measures. The balanced score combines several measures into one ranking, but the frontier is the more principled way to choose.'),
     concept('Session rules used by the simulator',
-      `A "game" is one Pass Line decision: from a come-out roll until a natural/craps or until the point is made or a seven-out (${THEORY.rollsPerGame.toFixed(3)} rolls on average; a shooter's hand lasts ${THEORY.rollsPerHand.toFixed(2)} rolls on average). The session ends after the chosen number of games, when the bankroll can no longer cover the strategy's smallest bet (ruin), or when the stop-loss / win goal is reached.`,
+      `A "game" is one Pass Line decision: from a come-out roll until a natural/craps or until the point is made or a seven-out (${theoryFor(r).rollsPerGame.toFixed(3)} rolls on average; a shooter's hand lasts ${theoryFor(r).rollsPerHand.toFixed(2)} rolls on average at this table). The session ends after the chosen number of games, when the bankroll can no longer cover the strategy's smallest bet (ruin), or when the stop-loss / win goal is reached.`,
       'At the end, standing bets (place, buy, lay, hardways, big 6/8) are taken down and contract bets (Pass/Come with a point, and Don\'t bets) are allowed to resolve, so no money is left in limbo.'),
     concept('Casino-accurate details',
       'Payouts are rounded down to the smallest chip (configurable), so a $10 Place 6 wins $11, not $11.67 — use $6 multiples. Buy and lay commissions are 5%, rounded down with a $1 minimum. Come odds are off on the come-out roll; place, buy, lay and hardway bets are off on the come-out unless you change the house rules. Don\'t Pass/Don\'t Come push on 12 (bar 12). Odds limits follow the selected table (3-4-5x by default) and lay odds may win up to the same multiple.'),

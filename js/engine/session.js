@@ -12,7 +12,8 @@ const NUMBER_TYPES = new Set(['place', 'buy', 'lay']);
 
 /** Minimum bet for a bet type at this table. */
 export function minimumFor(type, number, rules) {
-  if (type === 'hard' || PROPS[type]) return rules.propMin;
+  if (PROPS[type]) return rules.propMin * (PROPS[type].units || 1); // Horn = 4 units, C&E = 2 units
+  if (type === 'hard') return rules.propMin;
   if (type === 'place' && (number === 6 || number === 8)) {
     // At a $10 table, place 6/8 minimum is $12 (next multiple of $6).
     return Math.ceil(rules.tableMin / 6 - 1e-9) * 6;
@@ -74,15 +75,22 @@ export class PlayerSession {
     if (total < min - 1e-9) return `Minimum for ${labelFor(type, number)} is $${min}.`;
     switch (type) {
       case 'pass': case 'dontPass':
+        if (type === 'dontPass' && r.game === 'crapless') return "Crapless craps has no Don't Pass or Don't Come.";
         if (!t.isComeOut && !existing) return `${labelFor(type)} bets are made on the come-out roll.`;
         if (existing && existing.point !== null) return 'You cannot change a line bet once the point is set — add odds instead.';
         break;
       case 'come': case 'dontCome':
+        if (type === 'dontCome' && r.game === 'crapless') return "Crapless craps has no Don't Pass or Don't Come.";
         if (t.isComeOut) return `${labelFor(type)} bets are only allowed after a point is established.`;
         if (existing && existing.point !== null) return 'That bet already traveled to a number.';
         break;
       case 'place': case 'buy': case 'lay':
-        if (!isPointNumber(number)) return 'Invalid number.';
+        if (!isPointNumber(number, r)) {
+          return [2, 3, 11, 12].includes(number)
+            ? `${number} is only a box number at a Crapless craps table (switch the game on the Table Rules tab).`
+            : 'Invalid number.';
+        }
+        if (type === 'lay' && !isPointNumber(number)) return 'Lay bets are offered on 4, 5, 6, 8, 9 and 10.';
         if (type !== 'lay') {
           const other = t.find(type === 'place' ? 'buy' : 'place', number);
           if (other) return `You already have a ${other.type} bet on ${number}.`;

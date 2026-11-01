@@ -22,11 +22,18 @@ function make(name, notes, spec) {
   return normalizeStrategy(s);
 }
 
+const DONT_SIDE = new Set(['dontMax', 'darkSide']);
+const CRAPLESS_ONLY = new Set(['craplessMax', 'craplessOutside', 'craplessAcross']);
+
+/** Is this preset legal in the given game? (No Don't bets in crapless; 2/3/11/12 boxes only in crapless.) */
+export const presetFitsGame = (key, game = 'standard') => (game === 'crapless' ? !DONT_SIDE.has(key) : !CRAPLESS_ONLY.has(key));
+
 /**
  * @param {number} u table minimum
+ * @param {string} [game] 'standard' | 'crapless' — filters out presets that are illegal in that game
  * @returns {{key:string, build:()=>object}[]}
  */
-export function presetCatalog(u = 10) {
+export function presetCatalog(u = 10, game = 'standard') {
   const six = up(u, 6);          // place 6/8 unit (e.g. $12 at a $10 table)
   const five = up(u, 5);         // place 4/5/9/10 unit
   const small = Math.max(1, Math.round(u / 5));
@@ -72,8 +79,19 @@ export function presetCatalog(u = 10) {
       { line: none, field: { amount: u, when: 'always' }, progression: { type: 'martingale', target: 'field', maxMultiplier: 16 } }],
     ['hedge', 'Pass + Any Craps Hedge', 'Protect the Pass bet on the come-out with Any Craps. The hedge costs more than it saves.',
       { line: { type: 'pass', amount: u }, props: { amounts: { anyCraps: small }, when: 'comeOut' } }],
+    ['hornBettor', 'Pass + Horn on come-out', 'Pass Line plus a Horn bet (2, 3, 11, 12) on every come-out roll — the classic "yo-leven" player.',
+      { line: { type: 'pass', amount: u }, props: { amounts: { horn: 4 * small }, when: 'comeOut' } }],
+    // Crapless craps only: 2, 3, 11 and 12 are box numbers.
+    ['craplessMax', 'Crapless: Pass + Max Odds', 'Crapless craps Pass Line with max odds. No come-out craps losses — but the 11 no longer wins and long-shot points push the flat edge to 5.38%.',
+      { line: { type: 'pass', amount: u, odds: 'max' } }],
+    ['craplessOutside', 'Crapless: Place 2-3-11-12', 'Place the four crapless-only numbers: 2/12 pay 11:2, 3/11 pay 11:4. Big payouts, rare hits.',
+      { line: none, place: { amounts: { 2: up(u, 2), 3: up(u, 4), 11: up(u, 4), 12: up(u, 2) } } }],
+    ['craplessAcross', 'Crapless: Place all ten numbers', 'Every box number from 2 to 12 except 7 is covered — any non-7 roll pays something.',
+      { line: none, place: { amounts: { 2: up(u, 2), 3: up(u, 4), 4: five, 5: five, 6: six, 8: six, 9: five, 10: five, 11: up(u, 4), 12: up(u, 2) } } }],
   ];
-  return list.map(([key, name, notes, spec]) => ({ key, name, notes, build: () => ({ ...make(name, notes, spec), id: newId(), preset: key }) }));
+  return list
+    .filter(([key]) => presetFitsGame(key, game))
+    .map(([key, name, notes, spec]) => ({ key, name, notes, build: () => ({ ...make(name, notes, spec), id: newId(), preset: key }) }));
 }
 
 /** The starter set shown on first launch. */

@@ -5,21 +5,29 @@
 // the app compare "theory" against "simulation" honestly: if a casino rounds a $10
 // Place 6 win down from $11.67 to $11, both the simulation and the theory see $11.
 
-import { WAYS, PROPS } from './constants.js';
+import { WAYS, PROPS, POINT_NUMBERS, CRAPLESS_POINTS } from './constants.js';
 
 /** Odds-limit presets. Values are the max multiple of the flat bet, per point. */
+const flatOdds = (m) => Object.fromEntries(CRAPLESS_POINTS.map((n) => [n, m]));
 export const ODDS_LIMITS = Object.freeze({
-  '1x': { label: '1x', mult: { 4: 1, 5: 1, 6: 1, 8: 1, 9: 1, 10: 1 } },
-  '2x': { label: '2x', mult: { 4: 2, 5: 2, 6: 2, 8: 2, 9: 2, 10: 2 } },
-  '3x': { label: '3x', mult: { 4: 3, 5: 3, 6: 3, 8: 3, 9: 3, 10: 3 } },
-  '345x': { label: '3-4-5x (Las Vegas standard)', mult: { 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3 } },
-  '5x': { label: '5x', mult: { 4: 5, 5: 5, 6: 5, 8: 5, 9: 5, 10: 5 } },
-  '10x': { label: '10x', mult: { 4: 10, 5: 10, 6: 10, 8: 10, 9: 10, 10: 10 } },
-  '20x': { label: '20x', mult: { 4: 20, 5: 20, 6: 20, 8: 20, 9: 20, 10: 20 } },
-  '100x': { label: '100x', mult: { 4: 100, 5: 100, 6: 100, 8: 100, 9: 100, 10: 100 } },
+  '1x': { label: '1x', mult: flatOdds(1) },
+  '2x': { label: '2x', mult: flatOdds(2) },
+  '3x': { label: '3x', mult: flatOdds(3) },
+  // In crapless craps the outside numbers 2/3/11/12 take the same 3x as 4/10.
+  '345x': { label: '3-4-5x (Las Vegas standard)', mult: { 2: 3, 3: 3, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 3, 12: 3 } },
+  '5x': { label: '5x', mult: flatOdds(5) },
+  '10x': { label: '10x', mult: flatOdds(10) },
+  '20x': { label: '20x', mult: flatOdds(20) },
+  '100x': { label: '100x', mult: flatOdds(100) },
+});
+
+export const GAMES = Object.freeze({
+  standard: 'Standard craps',
+  crapless: 'Crapless craps (2, 3, 11, 12 are points)',
 });
 
 export const DEFAULT_RULES = Object.freeze({
+  game: 'standard',      // 'standard' | 'crapless'
   tableMin: 10,
   tableMax: 5000,
   propMin: 1,            // minimum for hardways / one-roll props
@@ -40,6 +48,7 @@ export function normalizeRules(r = {}) {
   out.tableMax = Math.max(out.tableMin, +out.tableMax || DEFAULT_RULES.tableMax);
   out.propMin = Math.max(0.01, +out.propMin || 1);
   if (!ODDS_LIMITS[out.oddsLimit]) out.oddsLimit = DEFAULT_RULES.oddsLimit;
+  if (!GAMES[out.game]) out.game = 'standard';
   out.field2Pays = [2, 3].includes(+out.field2Pays) ? +out.field2Pays : 2;
   out.field12Pays = [2, 3].includes(+out.field12Pays) ? +out.field12Pays : 2;
   out.vigRate = Math.min(0.2, Math.max(0, +out.vigRate));
@@ -54,19 +63,19 @@ export function normalizeRules(r = {}) {
 // ---------------------------------------------------------------------------
 
 /** True odds of a point number vs. a 7 (what free odds and buy bets pay). */
-export const TRUE_ODDS = Object.freeze({ 4: 2, 5: 3 / 2, 6: 6 / 5, 8: 6 / 5, 9: 3 / 2, 10: 2 });
+export const TRUE_ODDS = Object.freeze({ 2: 6, 3: 3, 4: 2, 5: 3 / 2, 6: 6 / 5, 8: 6 / 5, 9: 3 / 2, 10: 2, 11: 3, 12: 6 });
 /** What a lay bet / lay odds pay (the reverse of true odds). */
-export const LAY_ODDS = Object.freeze({ 4: 1 / 2, 5: 2 / 3, 6: 5 / 6, 8: 5 / 6, 9: 2 / 3, 10: 1 / 2 });
-/** Place bets pay less than true odds — that difference is the house edge. */
-export const PLACE_ODDS = Object.freeze({ 4: 9 / 5, 5: 7 / 5, 6: 7 / 6, 8: 7 / 6, 9: 7 / 5, 10: 9 / 5 });
+export const LAY_ODDS = Object.freeze({ 2: 1 / 6, 3: 1 / 3, 4: 1 / 2, 5: 2 / 3, 6: 5 / 6, 8: 5 / 6, 9: 2 / 3, 10: 1 / 2, 11: 1 / 3, 12: 1 / 6 });
+/** Place bets pay less than true odds — that difference is the house edge. (2/3/11/12: crapless only) */
+export const PLACE_ODDS = Object.freeze({ 2: 11 / 2, 3: 11 / 4, 4: 9 / 5, 5: 7 / 5, 6: 7 / 6, 8: 7 / 6, 9: 7 / 5, 10: 9 / 5, 11: 11 / 4, 12: 11 / 2 });
 export const HARD_ODDS = Object.freeze({ 4: 7, 6: 9, 8: 9, 10: 7 });
 
 /** Bet sizes that pay out evenly (no rounding loss). */
 export const UNITS = Object.freeze({
-  place: { 4: 5, 5: 5, 6: 6, 8: 6, 9: 5, 10: 5 },
-  odds: { 4: 1, 5: 2, 6: 5, 8: 5, 9: 2, 10: 1 },
-  buy: { 4: 1, 5: 2, 6: 5, 8: 5, 9: 2, 10: 1 },
-  lay: { 4: 2, 5: 3, 6: 6, 8: 6, 9: 3, 10: 2 },
+  place: { 2: 2, 3: 4, 4: 5, 5: 5, 6: 6, 8: 6, 9: 5, 10: 5, 11: 4, 12: 2 },
+  odds: { 2: 1, 3: 1, 4: 1, 5: 2, 6: 5, 8: 5, 9: 2, 10: 1, 11: 1, 12: 1 },
+  buy: { 2: 1, 3: 1, 4: 1, 5: 2, 6: 5, 8: 5, 9: 2, 10: 1, 11: 1, 12: 1 },
+  lay: { 2: 6, 3: 3, 4: 2, 5: 3, 6: 6, 8: 6, 9: 3, 10: 2, 11: 3, 12: 6 },
 });
 
 const EPS = 1e-9;
@@ -136,9 +145,12 @@ export function payoutTerms(type, number, amount, rules, sum = 0) {
       const mult = sum === 2 ? rules.field2Pays : sum === 12 ? rules.field12Pays : 1;
       return { profit: amount * mult, feeOnWin: 0, feeOnLoss: 0 };
     }
-    default:
-      if (PROPS[type]) return { profit: amount * PROPS[type].pays, feeOnWin: 0, feeOnLoss: 0 };
-      throw new Error(`Unknown bet type: ${type}`);
+    default: {
+      const prop = PROPS[type];
+      if (!prop) throw new Error(`Unknown bet type: ${type}`);
+      if (prop.paysBySum) return { profit: roundPayout(amount * (prop.paysBySum[sum] || 0), rules), feeOnWin: 0, feeOnLoss: 0 };
+      return { profit: amount * prop.pays, feeOnWin: 0, feeOnLoss: 0 };
+    }
   }
 }
 
@@ -151,13 +163,11 @@ export const pBefore7 = (n) => WAYS[n] / (WAYS[n] + 6);
 /** P(7 rolls before number) */
 export const p7Before = (n) => 6 / (WAYS[n] + 6);
 
-const POINTS = [4, 5, 6, 8, 9, 10];
-
 /** Pass line: P(win) = 244/495. Don't pass: wins on 2/3, pushes 12, otherwise mirror. */
 export const LINE_PROBS = (() => {
   let passWin = 8 / 36; // 7 or 11 on come-out
   let dontWin = 3 / 36; // 2 or 3
-  for (const p of POINTS) {
+  for (const p of POINT_NUMBERS) {
     passWin += (WAYS[p] / 36) * pBefore7(p);
     dontWin += (WAYS[p] / 36) * p7Before(p);
   }
@@ -168,6 +178,19 @@ export const LINE_PROBS = (() => {
 })();
 
 /**
+ * Crapless craps: only a come-out 7 wins immediately; every other number becomes the point.
+ * You give up the 11 (2 ways) to avoid 2/3/12 (4 ways) — and the long-shot points 2/3/11/12
+ * are hard to make, so the Pass edge jumps from 1.41% to 5.38%. There are no Don't bets.
+ */
+export const CRAPLESS_LINE_PROBS = (() => {
+  let passWin = 6 / 36;
+  for (const p of CRAPLESS_POINTS) passWin += (WAYS[p] / 36) * pBefore7(p);
+  return Object.freeze({ passWin, passLose: 1 - passWin, dontWin: 0, dontPush: 0, dontLose: 0 });
+})();
+
+export const lineProbs = (rules) => (rules && rules.game === 'crapless' ? CRAPLESS_LINE_PROBS : LINE_PROBS);
+
+/**
  * Expected profit (in $) of one decision of a bet with the given amount.
  * "Decision" = the bet is resolved (won, lost, or — for Don't bets — barred/pushed).
  * Negative values are the house's expected take.
@@ -176,11 +199,12 @@ export function expectedValue(type, number, amount, rules) {
   const t = payoutTerms(type, number, amount, rules);
   const winNet = t.profit - t.feeOnWin;
   const loseNet = -(amount + t.feeOnLoss);
+  const lp = lineProbs(rules);
   switch (type) {
     case 'pass': case 'come':
-      return LINE_PROBS.passWin * winNet + LINE_PROBS.passLose * loseNet;
+      return lp.passWin * winNet + lp.passLose * loseNet;
     case 'dontPass': case 'dontCome':
-      return LINE_PROBS.dontWin * winNet + LINE_PROBS.dontLose * loseNet;
+      return lp.dontWin * winNet + lp.dontLose * loseNet;
     case 'passOdds': case 'comeOdds': case 'place': case 'buy': case 'big': {
       const n = number;
       const p = pBefore7(n);
@@ -207,6 +231,11 @@ export function expectedValue(type, number, amount, rules) {
       const prop = PROPS[type];
       if (!prop) throw new Error(`Unknown bet type: ${type}`);
       const p = prop.wins.reduce((a, s) => a + WAYS[s], 0) / 36;
+      if (prop.paysBySum) {
+        let ev = -(1 - p) * amount;
+        for (const s of prop.wins) ev += (WAYS[s] / 36) * payoutTerms(type, 0, amount, rules, s).profit;
+        return ev;
+      }
       return p * winNet + (1 - p) * loseNet;
     }
   }
@@ -216,10 +245,10 @@ export function expectedValue(type, number, amount, rules) {
 export const houseEdge = (type, number, amount, rules) => -expectedValue(type, number, amount, rules) / amount;
 
 /** Probability of winning a single decision (pushes excluded). */
-export function winProbability(type, number) {
+export function winProbability(type, number, rules) {
   switch (type) {
-    case 'pass': case 'come': return LINE_PROBS.passWin;
-    case 'dontPass': case 'dontCome': return LINE_PROBS.dontWin;
+    case 'pass': case 'come': return lineProbs(rules).passWin;
+    case 'dontPass': case 'dontCome': return lineProbs(rules).dontWin;
     case 'passOdds': case 'comeOdds': case 'place': case 'buy': case 'big': return pBefore7(number);
     case 'dontPassOdds': case 'dontComeOdds': case 'lay': return p7Before(number);
     case 'hard': return 1 / (WAYS[number] + 6);
@@ -232,10 +261,12 @@ export function winProbability(type, number) {
  * Combined edge of a Pass Line bet with odds, per total dollar wagered.
  * Free odds have zero edge, so they dilute the 1.41% on the flat bet.
  */
-export function passWithOddsEdge(multByPoint) {
-  const flatLoss = -(LINE_PROBS.passWin - LINE_PROBS.passLose); // 7/495 per $1 flat
+export function passWithOddsEdge(multByPoint, rules) {
+  const lp = lineProbs(rules);
+  const flatLoss = -(lp.passWin - lp.passLose); // 7/495 per $1 flat in standard craps
   let avgOddsAction = 0;
-  for (const p of POINTS) avgOddsAction += (WAYS[p] / 36) * (multByPoint[p] || 0);
+  const pts = rules && rules.game === 'crapless' ? CRAPLESS_POINTS : POINT_NUMBERS;
+  for (const p of pts) avgOddsAction += (WAYS[p] / 36) * (multByPoint[p] || 0);
   return flatLoss / (1 + avgOddsAction);
 }
 

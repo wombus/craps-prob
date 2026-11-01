@@ -45,7 +45,7 @@ window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 
 function rulesChip() {
   const r = store.rules;
-  $('#rules-chip').textContent = `${money(r.tableMin)}–${money(r.tableMax, { compact: true })} · ${ODDS_LIMITS[r.oddsLimit].label.split(' ')[0]} odds · Field 12 pays ${r.field12Pays}:1`;
+  $('#rules-chip').textContent = `${r.game === 'crapless' ? 'CRAPLESS · ' : ''}${money(r.tableMin)}–${money(r.tableMax, { compact: true })} · ${ODDS_LIMITS[r.oddsLimit].label.split(' ')[0]} odds · Field 12 pays ${r.field12Pays}:1`;
 }
 $('#rules-chip').addEventListener('click', () => show('rules'));
 store.on('rules', rulesChip);

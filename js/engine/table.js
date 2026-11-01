@@ -84,8 +84,8 @@ export class CrapsTable {
     const pointBefore = this.point;
     let pointEstablished = false, pointMade = false, sevenOut = false, natural = false, crapsOut = false;
     if (comeOut) {
-      if (isPointNumber(sum)) { this.point = sum; pointEstablished = true; }
-      else if (sum === 7 || sum === 11) natural = true;
+      if (isPointNumber(sum, rules)) { this.point = sum; pointEstablished = true; }
+      else if (sum === 7 || sum === 11) natural = true; // crapless: only 7 reaches here
       else crapsOut = true;
     } else if (sum === this.point) {
       this.point = null; pointMade = true;
@@ -135,7 +135,7 @@ export class CrapsTable {
       default: {
         const prop = PROPS[bet.type];
         if (!prop) throw new Error(`Unknown bet type ${bet.type}`);
-        this._emit(events, bet, bet.type, 0, prop.wins.includes(sum) ? 'win' : 'lose', bet.amount, rules);
+        this._emit(events, bet, bet.type, 0, prop.wins.includes(sum) ? 'win' : 'lose', bet.amount, rules, sum);
         return false;
       }
     }
@@ -143,8 +143,13 @@ export class CrapsTable {
 
   _resolveDo(bet, sum, comeOut, rules, events) {
     if (bet.point === null) {
-      if (sum === 7 || sum === 11) { this._emit(events, bet, bet.type, 0, 'win', bet.amount, rules); return false; }
-      if (sum === 2 || sum === 3 || sum === 12) { this._emit(events, bet, bet.type, 0, 'lose', bet.amount, rules); return false; }
+      if (rules.game === 'crapless') {
+        // Crapless: 7 wins; every other number (including 2, 3, 11, 12) becomes this bet's point.
+        if (sum === 7) { this._emit(events, bet, bet.type, 0, 'win', bet.amount, rules); return false; }
+      } else {
+        if (sum === 7 || sum === 11) { this._emit(events, bet, bet.type, 0, 'win', bet.amount, rules); return false; }
+        if (sum === 2 || sum === 3 || sum === 12) { this._emit(events, bet, bet.type, 0, 'lose', bet.amount, rules); return false; }
+      }
       bet.point = sum;
       events.push({ bet, key: betKey(bet), evType: bet.type, number: sum, outcome: 'move', amount: bet.amount, net: 0, credit: 0 });
       return true;

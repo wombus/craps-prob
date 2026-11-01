@@ -5,8 +5,8 @@ import { h, clear, field, numberInput, select, checkbox, money, pct, info } from
 import { store, colorFor } from './state.js';
 import { normalizeStrategy, validateStrategy, describeStrategy, strategyBets, ODDS_CHOICES, PLACE_ON_HIT, WHEN_CHOICES } from '../engine/strategy.js';
 import { PROGRESSIONS } from '../engine/progressions.js';
-import { houseEdge, passWithOddsEdge, ODDS_LIMITS, maxOddsMultiple } from '../engine/rules.js';
-import { POINT_NUMBERS, HARD_NUMBERS, PROP_TYPES, PROPS } from '../engine/constants.js';
+import { houseEdge, passWithOddsEdge, ODDS_LIMITS, maxOddsMultiple, UNITS } from '../engine/rules.js';
+import { POINT_NUMBERS, HARD_NUMBERS, PROP_TYPES, PROPS, pointNumbers } from '../engine/constants.js';
 
 const oddsOptions = ODDS_CHOICES.map((v) => ({ value: v, label: v === 0 ? 'None' : v === 'max' ? 'Max (table limit)' : `${v}x` }));
 const whenOptions = (keys) => keys.map((k) => ({ value: k, label: WHEN_CHOICES[k] }));
@@ -69,13 +69,18 @@ export function openBuilder(strategy, { onSave, title = 'Edit strategy' } = {}) 
     ));
 
   // --- Place / buy
-  const placeRow = h('div', { class: 'number-grid' }, POINT_NUMBERS.map((n) => h('div', { class: 'number-cell' },
-    h('div', { class: 'number-cell-head', text: String(n) }),
-    numberInput(draft.place.amounts[n], set((v) => { draft.place.amounts[n] = v; }), { min: 0, step: n === 6 || n === 8 ? 6 : 5 }),
+  const crapless = rules.game === 'crapless';
+  const payText = (n) => ({ 2: '11:2', 3: '11:4', 4: '9:5', 5: '7:5', 6: '7:6', 8: '7:6', 9: '7:5', 10: '9:5', 11: '11:4', 12: '11:2' }[n]);
+  // Keep any 2/3/11/12 amounts visible even at a standard table, so the validation error is explainable.
+  const placeNums = crapless ? pointNumbers(rules) : [2, 3, 11, 12].filter((n) => draft.place.amounts[n] > 0).concat(POINT_NUMBERS).sort((a, b) => a - b);
+  const placeRow = h('div', { class: 'number-grid' }, placeNums.map((n) => h('div', { class: 'number-cell' },
+    h('div', { class: 'number-cell-head', text: `${n} · pays ${payText(n)}` }),
+    numberInput(draft.place.amounts[n], set((v) => { draft.place.amounts[n] = v; }), { min: 0, step: UNITS.place[n] }),
     checkbox('Buy', draft.place.buy.includes(n), set((c) => { draft.place.buy = c ? [...new Set([...draft.place.buy, n])] : draft.place.buy.filter((x) => x !== n); })),
   )));
-  const placeSec = sec('Place & Buy bets', 'Place bets win when the number rolls before a 7 and stay up after winning. Place pays 9:5 (4/10), 7:5 (5/9), 7:6 (6/8). Buy pays true odds minus a 5% commission. Bet 6/8 in $6 units and the rest in $5 units to avoid rounded-down payouts.',
+  const placeSec = sec('Place & Buy bets', 'Place bets win when the number rolls before a 7 and stay up after winning. Place pays 9:5 (4/10), 7:5 (5/9), 7:6 (6/8) — and at a crapless table 11:2 (2/12) and 11:4 (3/11). Buy pays true odds minus a 5% commission. Bet in the payout\'s units ($6 on 6/8, $5 on 4/5/9/10, $2 on 2/12, $4 on 3/11) to avoid rounded-down payouts.',
     placeRow,
+    crapless ? null : h('p', { class: 'field-hint', text: '2, 3, 11 and 12 aren\'t box numbers in standard craps — they decide the come-out roll. Bet them with the Field, the one-roll props or the Horn below, or switch to Crapless craps on the Table Rules tab to place them.' }),
     grid(
       field('When to bet', select(whenOptions(['pointOn', 'always']), draft.place.when, set((v) => { draft.place.when = v; }))),
       field('After a hit', select(Object.entries(PLACE_ON_HIT).map(([value, label]) => ({ value, label })), draft.place.onHit, set((v) => { draft.place.onHit = v; }))),
@@ -105,9 +110,9 @@ export function openBuilder(strategy, { onSave, title = 'Edit strategy' } = {}) 
       numberInput(draft.hard.amounts[n], set((v) => { draft.hard.amounts[n] = v; }), { min: 0 })))),
     grid(field('When to bet', select(whenOptions(['pointOn', 'always']), draft.hard.when, set((v) => { draft.hard.when = v; })))));
 
-  const propSec = sec('Proposition bets', 'One-roll center-table bets. Highest house edges on the table (11–17%).',
+  const propSec = sec('Proposition bets (2, 3, 11, 12 and more)', 'One-roll center-table bets — this is where 2, 3, 11 and 12 are bet individually in standard craps. Horn = $1 each on 2, 3, 11, 12 (bet in $4 units); C&E = half Any Craps, half Yo. Highest house edges on the table (11–17%).',
     h('div', { class: 'number-grid' }, PROP_TYPES.map((p) => h('div', { class: 'number-cell' },
-      h('div', { class: 'number-cell-head', text: `${PROPS[p].label} · ${PROPS[p].pays}:1` }),
+      h('div', { class: 'number-cell-head', text: `${PROPS[p].label} · ${PROPS[p].paysLabel}` }),
       numberInput(draft.props.amounts[p], set((v) => { draft.props.amounts[p] = v; }), { min: 0 })))),
     grid(
       field('When to bet', select(whenOptions(['comeOut', 'pointOn', 'always']), draft.props.when, set((v) => { draft.props.when = v; }))),
@@ -170,8 +175,8 @@ function renderCosts(el, s) {
   });
   if (s.line.type === 'pass' && s.line.odds) {
     const mult = {};
-    for (const n of POINT_NUMBERS) mult[n] = s.line.odds === 'max' ? maxOddsMultiple(rules, n) : Math.min(s.line.odds, maxOddsMultiple(rules, n));
-    rows.push({ label: `Pass + ${s.line.odds === 'max' ? 'max' : s.line.odds + 'x'} odds combined`, amount: null, edge: passWithOddsEdge(mult) });
+    for (const n of pointNumbers(rules)) mult[n] = s.line.odds === 'max' ? maxOddsMultiple(rules, n) : Math.min(s.line.odds, maxOddsMultiple(rules, n));
+    rows.push({ label: `Pass + ${s.line.odds === 'max' ? 'max' : s.line.odds + 'x'} odds combined`, amount: null, edge: passWithOddsEdge(mult, rules) });
   }
   if (!rows.length) { el.append(h('p', { class: 'muted', text: 'No bets yet.' })); return; }
   const tbl = h('table', { class: 'mini-table' },

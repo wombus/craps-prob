@@ -6,12 +6,14 @@ import { store } from './state.js';
 import { PlayerSession, labelFor, minimumFor } from '../engine/session.js';
 import { StrategyExecutor } from '../engine/strategy.js';
 import { cryptoDie } from '../engine/rng.js';
-import { WAYS, POINT_NUMBERS, PROPS, keyLabel } from '../engine/constants.js';
+import { WAYS, ALL_BOX_NUMBERS, PROPS, keyLabel } from '../engine/constants.js';
 import { columns, lineChart, mount } from './charts.js';
 
 const CHIPS = [1, 5, 25, 100, 500, 1000];
 const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
 const CALLS = { 2: 'Aces — craps!', 3: 'Ace-deuce, craps three', 11: 'Yo-leven!', 12: 'Boxcars — craps twelve' };
+const NICKNAMES = { 2: 'Aces', 3: 'Ace-deuce', 11: 'Yo-leven', 12: 'Boxcars' };
+const OUTSIDE = new Set([2, 3, 11, 12]);
 
 export function mountLiveTable(root) {
   let sess = new PlayerSession(store.rules, store.liveBankroll);
@@ -30,32 +32,52 @@ export function mountLiveTable(root) {
   // ---------------------------------------------------------------------------
   // Layout
   // ---------------------------------------------------------------------------
-  const spot = (id, label, cls = '', sub = '') => h('button', { class: `spot ${cls}`, dataset: { spot: id }, attrs: { 'aria-label': label } },
-    h('span', { class: 'spot-label', text: label }), sub ? h('span', { class: 'spot-sub', text: sub }) : null, h('span', { class: 'spot-chips' }));
+  const spot = (id, label, cls = '', sub = '', ...extra) => h('button', { class: `spot ${cls}`, dataset: { spot: id }, attrs: { 'aria-label': `${label}${sub ? `, ${sub}` : ''}` } },
+    h('span', { class: 'spot-label', text: label }), sub ? h('span', { class: 'spot-sub', text: sub }) : null, ...extra, h('span', { class: 'spot-chips' }));
 
-  const numbers = h('div', { class: 'numbers-row' }, POINT_NUMBERS.map((n) => h('div', { class: 'number-box', dataset: { n } },
-    spot(`dc-${n}`, `Don't Come on ${n}`, 'spot-dc', 'DC'),
-    spot(`num-${n}`, n === 6 ? 'SIX' : n === 9 ? 'NINE' : String(n), 'spot-number', placeSub(n)),
+  // Box numbers. 2, 3, 11 and 12 are only box numbers in crapless craps; CSS hides them otherwise.
+  const boxLabel = { 6: 'SIX', 9: 'NINE' };
+  const numbers = h('div', { class: 'numbers-row' }, ALL_BOX_NUMBERS.map((n) => h('div', { class: `number-box ${OUTSIDE.has(n) ? 'crapless-only' : ''}`, dataset: { n } },
+    spot(`dc-${n}`, `Don't Come on ${n}`, 'spot-dc dont-only', 'DC'),
+    spot(`num-${n}`, boxLabel[n] || String(n), 'spot-number', placeSub(n)),
     spot(`come-${n}`, `Come on ${n}`, 'spot-cn', 'COME'),
     h('span', { class: 'puck', hidden: true, text: 'ON' }))));
 
-  const felt = h('div', { class: 'felt' },
+  // Field: the numbers are printed on the felt, with the bonus numbers circled.
+  const fieldNums = h('span', { class: 'field-numbers', attrs: { 'aria-hidden': 'true' } });
+  const drawFieldNumbers = () => {
+    const r = store.rules;
+    clear(fieldNums).append(...[2, 3, 4, 9, 10, 11, 12].map((n) => {
+      const bonus = n === 2 ? r.field2Pays : n === 12 ? r.field12Pays : 0;
+      return h('span', { class: `field-num ${bonus ? 'bonus' : ''}` }, h('span', { text: String(n) }), bonus ? h('small', { text: `pays ${bonus}×` }) : null);
+    }));
+  };
+  drawFieldNumbers();
+
+  // One-roll numbers: where 2, 3, 11 and 12 are bet in standard craps.
+  const DICE_FOR = { 2: [1, 1], 3: [1, 2], 11: [5, 6], 12: [6, 6], 4: [2, 2], 6: [3, 3], 8: [4, 4], 10: [5, 5] };
+  const oneRoll = (id, n, name, pays) => spot(id, String(n), 'spot-prop prop-num', `${name} · ${pays}`, miniDice(...DICE_FOR[n]));
+  const hardway = (n, pays) => spot(`hard${n}`, `Hard ${n}`, 'spot-prop', pays, miniDice(...DICE_FOR[n]));
+
+  const felt = h('div', { class: `felt ${store.rules.game === 'crapless' ? 'crapless' : ''}` },
     h('div', { class: 'felt-main' },
-      h('div', { class: 'felt-top' }, spot('dontCome', "DON'T COME", 'spot-dontcome', 'Bar 12'), numbers),
+      h('div', { class: 'felt-top' }, spot('dontCome', "DON'T COME", 'spot-dontcome dont-only', 'Bar 12'), numbers),
       spot('come', 'COME', 'spot-come'),
-      spot('field', 'FIELD', 'spot-field', `2 pays ${store.rules.field2Pays}:1 · 3 · 4 · 9 · 10 · 11 · 12 pays ${store.rules.field12Pays}:1`),
-      h('div', { class: 'line-row' }, spot('dontPass', "DON'T PASS BAR 12", 'spot-dontpass'), spot('dontPassOdds', 'Lay odds', 'spot-odds')),
+      spot('field', 'FIELD', 'spot-field', '', fieldNums),
+      h('div', { class: 'line-row dont-only' }, spot('dontPass', "DON'T PASS BAR 12", 'spot-dontpass'), spot('dontPassOdds', 'Lay odds', 'spot-odds')),
       h('div', { class: 'line-row' }, spot('pass', 'PASS LINE', 'spot-pass'), spot('passOdds', 'Odds', 'spot-odds')),
       h('div', { class: 'big-row' }, spot('big6', 'BIG 6', 'spot-big'), spot('big8', 'BIG 8', 'spot-big'))),
     h('div', { class: 'felt-props' },
-      h('div', { class: 'props-title', text: 'PROPOSITIONS' }),
+      h('div', { class: 'props-title', text: 'HARDWAYS' }),
       h('div', { class: 'props-grid' },
-        spot('hard6', 'Hard 6', 'spot-prop', '9 to 1'), spot('hard10', 'Hard 10', 'spot-prop', '7 to 1'),
-        spot('hard8', 'Hard 8', 'spot-prop', '9 to 1'), spot('hard4', 'Hard 4', 'spot-prop', '7 to 1'),
-        spot('any7', 'Any Seven', 'spot-prop wide', '4 to 1'),
-        spot('aces', 'Aces (2)', 'spot-prop', '30 to 1'), spot('boxcars', 'Boxcars (12)', 'spot-prop', '30 to 1'),
-        spot('aceDeuce', 'Ace-Deuce (3)', 'spot-prop', '15 to 1'), spot('yo', 'Yo (11)', 'spot-prop', '15 to 1'),
-        spot('anyCraps', 'Any Craps', 'spot-prop wide', '7 to 1'))));
+        hardway(6, '9 to 1'), hardway(10, '7 to 1'), hardway(8, '9 to 1'), hardway(4, '7 to 1'),
+        spot('any7', 'Any Seven', 'spot-prop wide', '4 to 1')),
+      h('div', { class: 'props-title', text: 'ONE-ROLL NUMBERS' }),
+      h('div', { class: 'props-grid' },
+        oneRoll('aces', 2, 'Aces', '30 to 1'), oneRoll('aceDeuce', 3, 'Ace-Deuce', '15 to 1'),
+        oneRoll('boxcars', 12, 'Boxcars', '30 to 1'), oneRoll('yo', 11, 'Yo', '15 to 1'),
+        spot('horn', 'HORN', 'spot-prop', '2 · 3 · 11 · 12'), spot('ce', 'C & E', 'spot-prop', 'Craps & Eleven'),
+        spot('anyCraps', 'Any Craps', 'spot-prop wide', '2 · 3 · 12 · 7 to 1'))));
 
   // ---------------------------------------------------------------------------
   // Controls
@@ -286,6 +308,7 @@ export function mountLiveTable(root) {
       else call = CALLS[res.sum] || `Craps ${res.sum}`;
     } else if (res.pointMade) call = `${res.sum} — point made! Winner!`;
     else if (res.sevenOut) call = 'Seven out — line away';
+    else if (sess.rules.game === 'crapless' && NICKNAMES[res.sum]) call = `${NICKNAMES[res.sum]} (${res.sum})`;
     else call = CALLS[res.sum] || (res.hard && [4, 6, 8, 10].includes(res.sum) ? `Hard ${res.sum}` : `${res.sum}${[4, 6, 8, 10].includes(res.sum) ? ' the easy way' : ''}`);
     callout.textContent = `${res.d1} + ${res.d2} = ${res.sum} · ${call}`;
     callout.className = `callout ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}`;
@@ -328,6 +351,7 @@ export function mountLiveTable(root) {
   resetBtn.addEventListener('click', () => {
     if (autoTimer) autoTimer.stop = true;
     sess = new PlayerSession(store.rules, store.liveBankroll);
+    applyRulesToFelt();
     if (autoStrategyId) { const s = store.getStrategy(autoStrategyId); executor = s ? new StrategyExecutor(s, sess.rules) : null; }
     history.length = 0; log.length = 0; freq.fill(0); bankrollTrail.length = 0; bankrollTrail.push(sess.bankroll);
     Object.assign(stats, { games: 0, pointsMade: 0, sevenOuts: 0, hand: 0, longestHand: 0, bestRoll: 0, worstRoll: 0 });
@@ -337,10 +361,14 @@ export function mountLiveTable(root) {
   });
 
   store.on('strategies', fillStrats);
+  function applyRulesToFelt() {
+    drawFieldNumbers();
+    felt.classList.toggle('crapless', store.rules.game === 'crapless');
+  }
   store.on('rules', () => {
     if (sess.table.bets.length) { toast('New table rules apply after you start a new session (bets are on the table).', 'info'); return; }
     sess = new PlayerSession(store.rules, sess.bankroll);
-    felt.querySelector('[data-spot="field"] .spot-sub').textContent = `2 pays ${store.rules.field2Pays}:1 · 3 · 4 · 9 · 10 · 11 · 12 pays ${store.rules.field12Pays}:1`;
+    applyRulesToFelt();
     render();
   });
 
@@ -417,7 +445,13 @@ export function mountLiveTable(root) {
 }
 
 function placeSub(n) {
-  return { 4: '9:5', 5: '7:5', 6: '7:6', 8: '7:6', 9: '7:5', 10: '9:5' }[n];
+  return { 2: '11:2', 3: '11:4', 4: '9:5', 5: '7:5', 6: '7:6', 8: '7:6', 9: '7:5', 10: '9:5', 11: '11:4', 12: '11:2' }[n];
+}
+
+/** Two tiny dice drawn with CSS pips (unicode die glyphs render inconsistently across fonts). */
+function miniDice(a, b) {
+  const die = (v) => h('span', { class: 'mini-die' }, ...Array.from({ length: 9 }, (_, i) => h('span', { class: PIPS[v].includes(i + 1) ? 'on' : '' })));
+  return h('span', { class: 'mini-dice', attrs: { 'aria-hidden': 'true' } }, die(a), die(b));
 }
 
 function dieEl() {

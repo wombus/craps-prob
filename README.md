@@ -11,7 +11,7 @@ It has no dependencies or build step. It is plain ES modules, Web Workers and ha
 
 ```bash
 npm start        # → http://localhost:8080   (any static server works; file:// does not, see below)
-npm test         # 42 engine tests with Node's built-in test runner (Node 18+)
+npm test         # 53 engine tests with Node's built-in test runner (Node 18+)
 ```
 
 ---
@@ -22,9 +22,23 @@ npm test         # 42 engine tests with Node's built-in test runner (Node 18+)
 |---|---|
 | **Simulator** | Pick or build strategies, set bankroll, games per session, number of sessions, stop-loss and win goal, then press Run. You get headline tiles, written findings, a sortable ranking, a risk-vs-reward frontier, outcome distributions, bankroll fan charts, sample sessions, a per-bet breakdown and dice diagnostics. CSV/JSON export is included. |
 | **Strategy Explorer** | Choose options in 8 dimensions: line bet, odds, come bets, box numbers, press/regress, field, hardways and progression. The app builds every unique combination, simulates them all on the same dice, ranks them, and shows the average effect of each individual choice. Send the winners to the Simulator. |
-| **Live Table** | A full layout covering Pass/Don't, Come/Don't Come with odds, Place/Buy/Lay, Field, Hardways, Props and Big 6/8. You get a chip rack, Remove mode (or right-click) and a "set dice" option for learning. Auto-play runs any saved strategy roll by roll using the same executor as the simulator. |
+| **Live Table** | A full layout covering Pass/Don't, Come/Don't Come with odds, Place/Buy/Lay, the Field (numbers 2, 3, 4, 9, 10, 11, 12 printed on the felt), Hardways, one-roll numbers 2, 3, 11, 12, Any 7, Any Craps, Horn, C&E and Big 6/8. You get a chip rack, Remove mode (or right-click) and a "set dice" option for learning. Auto-play runs any saved strategy roll by roll using the same executor as the simulator. |
 | **Odds & Learn** | The 36 dice combinations, a probability table for sums 2–12, and the house edge of every bet under *your* table rules. It also shows how odds dilute the edge and explains the statistics used. |
-| **Table Rules** | Table min/max, odds limit (1x … 3‑4‑5x … 100x), field 2/12 payouts, payout rounding, commission rate and timing, and which bets work on the come-out. Casino presets are included. |
+| **Table Rules** | Game (standard or **crapless**), table min/max, odds limit (1x … 3‑4‑5x … 100x), field 2/12 payouts, payout rounding, commission rate and timing, and which bets work on the come-out. Casino presets are included. |
+
+### Where are 2, 3, 11 and 12?
+
+In **standard craps** they aren't box numbers. They decide the come-out roll at once: 2, 3 and 12 are "craps" (Pass loses) and 11 is "yo" (Pass wins). On the felt you bet them in three places:
+
+- the **Field**,
+- the **one-roll props**: Aces (2) 30:1, Ace-Deuce (3) 15:1, Yo (11) 15:1, Boxcars (12) 30:1,
+- the **Horn** (all four at once, 12.5% edge) and **C&E**.
+
+In **crapless craps** (Table Rules → Game) they become box numbers:
+
+- They can be the point, and Place pays 11:2 on 2/12 and 11:4 on 3/11. Odds pay 6:1 and 3:1.
+- Only a come-out 7 wins. There are no Don't bets.
+- The Pass Line edge jumps from 1.41% to 5.38%. The simulator and the Odds & Learn tab show why.
 
 ### Casino accuracy
 
@@ -34,7 +48,7 @@ Everything below follows standard Las Vegas practice by default, and every item 
 - Free odds pay true odds (2:1, 3:2, 6:5). Lay odds may win up to the same multiple, which means "6x on the don't" at a 3‑4‑5x table.
 - Place bets pay 9:5 / 7:5 / 7:6. **Payouts are rounded down to the chip**, so a $10 Place 6 wins $11, not $11.67. Bet $12.
 - Buy and Lay pay true odds minus 5% commission, rounded down with a $1 minimum. You choose whether it's charged on wins only or on every decision.
-- Field pays 2:1 on 2 and 2:1 or 3:1 on 12. Hardways pay 9:1 or 7:1. Props use standard "to 1" payouts.
+- Field pays 2:1 on 2 and 2:1 or 3:1 on 12. Hardways pay 9:1 or 7:1. Props use standard "to 1" payouts. Horn is split four ways (27:4 on 2/12, 3:1 on 3/11) and C&E two ways (3:1 craps, 7:1 eleven).
 - Come odds are **off** on the come-out. Place, buy, lay and hardway bets are off on the come-out. Don't-side odds always work.
 - The table enforces minimums ($12 on 6/8 at a $10 table), maximums and odds limits. Contract bets can't be removed once a point is set.
 
