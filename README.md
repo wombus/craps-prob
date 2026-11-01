@@ -9,6 +9,8 @@ A craps strategy simulator for the browser. It uses casino-accurate rules and pa
 
 It has no dependencies or build step. It is plain ES modules, Web Workers and hand-written SVG charts.
 
+**▶ Play it online: https://wombus.github.io/craps-prob/** (hosted free on GitHub Pages)
+
 ```bash
 npm start        # → http://localhost:8080   (any static server works; file:// does not, see below)
 npm test         # 53 engine tests with Node's built-in test runner (Node 18+)
@@ -132,6 +134,18 @@ One **trial** is one casino session. You start with the bankroll and play `games
 ## Charts
 
 The charts are hand-written SVG, with a hover tooltip on every mark and a table view of each figure in the ranking and breakdown tables. The categorical palette was validated for color-vision deficiency and contrast on the dark surface. Each strategy keeps its color in every chart, so colors follow strategies, not ranks.
+
+## Hosting (GitHub Pages)
+
+The site is the repository itself: `index.html` at the root, with relative paths throughout. GitHub Pages serves it with no build step:
+
+1. In the repository, open **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to *Deploy from a branch*. Then set **Branch** to `main` and the folder to `/ (root)`, and click **Save**.
+3. After about a minute the site is live at `https://<user>.github.io/<repo>/`. Every push to `main` redeploys it automatically.
+
+The empty `.nojekyll` file tells Pages to serve the files exactly as they are, without its default Jekyll build. `assets/og-image.png` and the `og:` meta tags in `index.html` give shared links a title, description and preview image. If you fork the repo, update the URLs in those tags.
+
+Each visitor's strategies and settings are saved in their own browser (localStorage). Nothing is sent to a server, so friends can't see or change each other's data.
 
 ## Why a local server?
 
